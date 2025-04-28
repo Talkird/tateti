@@ -23,7 +23,7 @@ object SoundPlayer {
     }
 
     fun playDrawSound(context: Context) {
-        playSound(context, com.losauro.tateti.R.raw.bubble)
+        playSound(context, com.losauro.tateti.R.raw.drama)
     }
 
 }

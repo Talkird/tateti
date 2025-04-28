@@ -15,12 +15,13 @@ import androidx.compose.ui.text.style.TextAlign
 import com.losauro.tateti.ui.theme.DarkBackground
 import com.losauro.tateti.ui.theme.Theme
 import androidx.compose.ui.unit.dp
+import com.losauro.tateti.game.SoundPlayer
 import com.losauro.tateti.ui.theme.InputBackground
 import com.losauro.tateti.ui.theme.Primary
-import kotlinx.coroutines.delay
-import kotlin.random.Random
 import com.losauro.tateti.ui.theme.heading
 import com.losauro.tateti.ui.theme.gameFont
+import androidx.compose.ui.platform.LocalContext
+import com.losauro.tateti.game.TicTacToe
 
 class GameActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,65 +36,15 @@ class GameActivity : ComponentActivity() {
             }
         }
     }
-}
 
 @Composable
 fun GameScreen(playerName: String, selectedOption: String) {
-    var board by remember { mutableStateOf(List(3) { MutableList(3) { "" } }) }
-    var currentPlayer by remember { mutableStateOf("X") }
-    var gameOver by remember { mutableStateOf(false) }
-    var winner by remember { mutableStateOf<String?>(null) }
-    val playerSymbol = selectedOption
-    val aiSymbol = if (playerSymbol == "X") "O" else "X"
+    val ticTacToe = remember { TicTacToe(selectedOption) }
+    val context = LocalContext.current
 
-    fun checkWinner(): String? {
-        val lines = listOf(
-            // Rows
-            listOf(board[0][0], board[0][1], board[0][2]),
-            listOf(board[1][0], board[1][1], board[1][2]),
-            listOf(board[2][0], board[2][1], board[2][2]),
-            // Columns
-            listOf(board[0][0], board[1][0], board[2][0]),
-            listOf(board[0][1], board[1][1], board[2][1]),
-            listOf(board[0][2], board[1][2], board[2][2]),
-            // Diagonals
-            listOf(board[0][0], board[1][1], board[2][2]),
-            listOf(board[0][2], board[1][1], board[2][0])
-        )
-        for (line in lines) {
-            if (line.all { it == "X" }) return "X"
-            if (line.all { it == "O" }) return "O"
-        }
-        return if (board.flatten().all { it.isNotEmpty() }) "Empate" else null
-    }
-
-    suspend fun makeAIMove() {
-        delay(Random.nextLong(500, 2000))
-        val emptyCells = board.flatMapIndexed { r, row ->
-            row.mapIndexedNotNull { c, value -> if (value.isEmpty()) r to c else null }
-        }
-        if (emptyCells.isNotEmpty()) {
-            val (row, col) = emptyCells.random()
-            board = board.mapIndexed { r, rowList ->
-                rowList.mapIndexed { c, value ->
-                    if (r == row && c == col) aiSymbol else value
-                }.toMutableList()
-            }
-            winner = checkWinner()
-            gameOver = winner != null
-            currentPlayer = if (!gameOver) playerSymbol else ""
-        }
-    }
-
-    LaunchedEffect(currentPlayer) {
-        if (!gameOver && currentPlayer == aiSymbol) {
-            makeAIMove()
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        if (playerSymbol == "O") {
-            currentPlayer = aiSymbol
+    LaunchedEffect(ticTacToe.currentPlayer) {
+        if (!ticTacToe.gameOver && ticTacToe.currentPlayer != selectedOption) {
+            ticTacToe.makeAIMove()
         }
     }
 
@@ -106,7 +57,7 @@ fun GameScreen(playerName: String, selectedOption: String) {
             verticalArrangement = Arrangement.spacedBy(50.dp)
         ) {
             Text(
-                text = "Juega $playerName con ${if (playerSymbol == "X") "las Cruces" else "los Círculos"}",
+                text = "Juega $playerName con ${if (selectedOption == "X") "las Cruces" else "los Círculos"}",
                 color = Color.White,
                 style = heading,
                 textAlign = TextAlign.Center,
@@ -118,23 +69,12 @@ fun GameScreen(playerName: String, selectedOption: String) {
                     Row {
                         for (col in 0..2) {
                             Button(
-                                onClick = {
-                                    if (!gameOver && board[row][col].isEmpty() && currentPlayer == playerSymbol) {
-                                        board = board.mapIndexed { r, rowList ->
-                                            rowList.mapIndexed { c, value ->
-                                                if (r == row && c == col) playerSymbol else value
-                                            }.toMutableList()
-                                        }
-                                        winner = checkWinner()
-                                        gameOver = winner != null
-                                        if (!gameOver) currentPlayer = aiSymbol
-                                    }
-                                },
+                                onClick = { ticTacToe.makePlayerMove(row, col) },
                                 modifier = Modifier.size(80.dp).padding(4.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = InputBackground)
                             ) {
                                 Text(
-                                    text = board[row][col],
+                                    text = ticTacToe.board[row][col],
                                     style = gameFont,
                                     color = Color.White,
                                 )
@@ -144,11 +84,19 @@ fun GameScreen(playerName: String, selectedOption: String) {
                 }
             }
 
-            if (gameOver) {
+            if (ticTacToe.gameOver) {
+                when (ticTacToe.winner) {
+                    selectedOption -> SoundPlayer.playVictorySound(context)
+                    ticTacToe.aiSymbol -> SoundPlayer.playDefeatSound(context)
+                    "Empate" -> SoundPlayer.playDrawSound(context)
+                }
+            }
+
+            if (ticTacToe.gameOver) {
                 Text(
-                    text = when (winner) {
+                    text = when (ticTacToe.winner) {
                         "Empate" -> "¡Es un empate! 🤝"
-                        playerSymbol -> "¡Ganaste, $playerName! \uD83D\uDE01"
+                        selectedOption -> "¡Ganaste, $playerName! \uD83D\uDE01"
                         else -> "¡La IA gana! \uD83E\uDD16"
                     },
                     textAlign = TextAlign.Center,
@@ -159,12 +107,7 @@ fun GameScreen(playerName: String, selectedOption: String) {
             }
 
             Button(
-                onClick = {
-                    board = List(3) { MutableList(3) { "" } }
-                    currentPlayer = "X"
-                    gameOver = false
-                    winner = null
-                },
+                onClick = { ticTacToe.resetGame() },
                 colors = ButtonDefaults.buttonColors(containerColor = Primary),
                 contentPadding = PaddingValues(horizontal = 32.dp, vertical = 16.dp),
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
@@ -172,10 +115,10 @@ fun GameScreen(playerName: String, selectedOption: String) {
                 Text(
                     text = "JUGAR DE NUEVO",
                     color = Color.White,
-
                     style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                 )
             }
         }
     }
+}
 }
